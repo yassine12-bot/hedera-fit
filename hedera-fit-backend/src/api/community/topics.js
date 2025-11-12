@@ -9,7 +9,7 @@ const authMiddleware = require('../../auth/middleware');
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const topics = await db.all(`
-      SELECT 
+      SELECT
         t.*,
         u.name as creatorName,
         (SELECT COUNT(*) FROM topic_members WHERE topicId = t.id) as memberCount,
@@ -65,10 +65,11 @@ router.post('/', authMiddleware, async (req, res) => {
       WHERE t.id = ?
     `, [result.lastID]);
 
+    // ✅ CORRIGÉ: Retourner "topic" au lieu de "data"
     res.status(201).json({
       success: true,
       message: 'Topic créé avec succès',
-      data: topic
+      topic: topic  // ← CORRIGÉ: était "data"
     });
   } catch (error) {
     res.status(500).json({
@@ -152,7 +153,7 @@ router.get('/:id/messages', authMiddleware, async (req, res) => {
     }
 
     const messages = await db.all(`
-      SELECT 
+      SELECT
         m.*,
         u.name as userName
       FROM topic_messages m
@@ -236,7 +237,7 @@ router.get('/:id/events', authMiddleware, async (req, res) => {
     const topicId = req.params.id;
 
     const events = await db.all(`
-      SELECT 
+      SELECT
         e.*,
         u.name as creatorName,
         (SELECT COUNT(*) FROM event_participants WHERE eventId = e.id) as participantsCount,
@@ -342,7 +343,7 @@ router.post('/events/:eventId/join', authMiddleware, async (req, res) => {
     await db.run(`
       INSERT INTO event_participants (eventId, userId, status)
       VALUES (?, ?, ?)
-      ON CONFLICT(eventId, userId) 
+      ON CONFLICT(eventId, userId)
       DO UPDATE SET status = ?, joinedAt = CURRENT_TIMESTAMP
     `, [eventId, req.user.id, status, status]);
 

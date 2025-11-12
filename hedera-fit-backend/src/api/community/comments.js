@@ -2,11 +2,11 @@ const express = require('express');
 const router = express.Router();
 const db = require('../../lib/db');
 const aiService = require('../../lib/ai');
-const badgeService = require('../../lib/badges-service'); // ✅ Pour les badges
+// const badgeService = require('../../lib/badges-service'); // ⚠️ DÉSACTIVÉ temporairement
 const authMiddleware = require('../../auth/middleware');
 
 /**
- * POST /api/comments - Créer un commentaire (avec modération IA + badges)
+ * POST /api/comments - Créer un commentaire (avec modération IA)
  */
 router.post('/', authMiddleware, async (req, res) => {
     try {
@@ -58,21 +58,22 @@ router.post('/', authMiddleware, async (req, res) => {
             });
         }
 
-        // ✅ NOUVEAU: Mettre à jour les stats et vérifier les badges
         const isPositive = moderation.sentiment > 0.5;
-        const statsUpdate = await badgeService.updateUserStats(
-            req.user.id,
-            isPositive ? 'positive_comment' : 'comment'
-        );
 
-        // 🎁 RÉCOMPENSE pour commentaire positif (SANS bonus multiplicateur)
+        // ⚠️ Badge service désactivé temporairement
+        // const statsUpdate = await badgeService.updateUserStats(
+        //     req.user.id,
+        //     isPositive ? 'positive_comment' : 'comment'
+        // );
+
+        // 🎁 RÉCOMPENSE pour commentaire positif
         let fitReward = 0;
         if (isPositive) {
-            fitReward = 2; // Reward fixe
+            fitReward = 2;
 
-            // Ajouter les rewards
+            // ✅ CORRIGÉ: Utiliser 'amount' et 'createdAt' au lieu de 'tokens' et 'date'
             await db.run(`
-                INSERT INTO rewards (userId, type, tokens, date)
+                INSERT INTO rewards (userId, type, amount, createdAt)
                 VALUES (?, 'positive_comment', ?, datetime('now'))
             `, [req.user.id, fitReward]);
 
@@ -95,11 +96,11 @@ router.post('/', authMiddleware, async (req, res) => {
             WHERE c.id = ?
         `, [result.lastID]);
 
-        // Construire la réponse
+        // ✅ CORRIGÉ: Retourner "comment" au lieu de "data"
         const response = {
             success: true,
             message: isPositive ? `Commentaire positif ! +${fitReward} FIT tokens 🎉` : 'Commentaire ajouté',
-            data: comment,
+            comment: comment,
             aiAnalysis: {
                 sentiment: moderation.sentiment,
                 label: moderation.sentimentLabel,
@@ -108,19 +109,17 @@ router.post('/', authMiddleware, async (req, res) => {
             }
         };
 
-        // ✅ NOUVEAU: Ajouter les infos des nouveaux badges
-        if (statsUpdate.newBadges && statsUpdate.newBadges.length > 0) {
-            response.newBadges = statsUpdate.newBadges;
-            response.badgeNotification = `🏅 Félicitations ! Tu as débloqué ${statsUpdate.newBadges.length} nouveau(x) badge(s) !`;
-            
-            // Ajouter les détails des badges
-            response.badgesUnlocked = statsUpdate.newBadges.map(badge => ({
-                name: badge.name,
-                rarity: badge.rarity,
-                description: badge.description,
-                nftUrl: badge.nft.explorerUrl
-            }));
-        }
+        // ⚠️ Badges désactivés temporairement
+        // if (statsUpdate.newBadges && statsUpdate.newBadges.length > 0) {
+        //     response.newBadges = statsUpdate.newBadges;
+        //     response.badgeNotification = `🏅 Félicitations ! Tu as débloqué ${statsUpdate.newBadges.length} nouveau(x) badge(s) !`;
+        //     response.badgesUnlocked = statsUpdate.newBadges.map(badge => ({
+        //         name: badge.name,
+        //         rarity: badge.rarity,
+        //         description: badge.description,
+        //         nftUrl: badge.nft.explorerUrl
+        //     }));
+        // }
 
         res.status(201).json(response);
     } catch (error) {

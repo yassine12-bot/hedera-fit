@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Hedera Fit</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="/balance-loader.js"></script>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>🏋️ HEDERA FIT</h1>
+      <div class="user-info">
+        <span class="balance" id="balance">0 FIT</span>
+        <span id="user-name">User</span>
+        <button class="btn btn-secondary" onclick="logout()">Déconnexion</button>
+      </div>
+    </div>
+    
+    <!-- Navigation -->
+    <div class="nav">
+      <a href="dashboard.html" class="active">Dashboard</a>
+      <a href="shop.html">Marketplace</a>
+    </div>
+    
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat-card">
+        <div class="number" id="total-steps">0</div>
+        <div class="label">👟 Total Pas</div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="number" id="fit-balance">0</div>
+        <div class="label">💰 FIT Tokens</div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="number" id="total-purchases">0</div>
+        <div class="label">🛒 Achats</div>
+      </div>
+    </div>
+    
+    <!-- Main Content -->
+    <div class="grid">
+      <!-- Wallet Card -->
+      <div class="card">
+        <h2>💳 Mon Wallet Hedera</h2>
+        <div id="wallet-content">
+          <p>Chargement...</p>
+        </div>
+      </div>
+      
+      <!-- Sync Shoes Card -->
+      <div class="card">
+        <h2>👟 Smart Shoes</h2>
+        <p style="margin-bottom: 20px;">Synchronise tes pas pour gagner des FIT tokens!</p>
+        
+        <div class="form-group">
+          <label for="steps-input">Nombre de pas</label>
+          <input type="number" id="steps-input" value="12000" min="1000" max="50000">
+        </div>
+        
+        <button class="btn btn-primary" onclick="syncShoes()" style="width: 100%">
+          🔄 Synchroniser
+        </button>
+        
+        <div id="sync-result" class="mt-20"></div>
+      </div>
+    </div>
+    
+    <!-- Workout History -->
+    <div class="card">
+      <h2>📊 Historique d'Activité</h2>
+      <div id="workout-history">
+        <p>Chargement...</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // API_URL is already declared in balance-loader.js
+    let token = localStorage.getItem('token');
+    let user = JSON.parse(localStorage.getItem('user') || '{}');
+    
+    // Check authentication
+    if (!token) {
+      window.location.href = 'login.html';
+    }
+    
+    // Logout
+    function logout() {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = 'login.html';
+    }
+    
+    // API Request helper
+    async function apiRequest(endpoint, method = 'GET', body = null) {
+      const options = {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      };
+      
+      if (body) {
+        options.body = JSON.stringify(body);
+      }
+      
+      const response = await fetch(`${API_URL}${endpoint}`, options);
+      return await response.json();
+    }
+    
+    // Load user data
+    async function loadUserData() {
+      try {
+        // Update header
+        document.getElementById('user-name').textContent = user.name || 'User';
+        
+        // Get user stats (fake endpoint, on va construire depuis les données existantes)
+        const userData = user;
+        document.getElementById('total-steps').textContent = userData.totalSteps || 0;
+        document.getElementById('fit-balance').textContent = userData.fitBalance || 0;
+        document.getElementById('balance').textContent = (userData.fitBalance || 0) + ' FIT';
+        
+        // Load wallet
+        const walletData = await apiRequest('/api/users/wallet');
+        if (walletData.success && walletData.hasWallet) {
+          document.getElementById('wallet-content').innerHTML = `
+            <p><strong>Account ID:</strong> ${walletData.wallet.accountId}</p>
+            <p><strong>Créé le:</strong> ${new Date(walletData.wallet.createdAt).toLocaleDateString()}</p>
+            <a href="${walletData.wallet.explorerUrl}" target="_blank" class="btn btn-primary mt-20">
+              🌐 Voir sur HashScan
+            </a>
+          `;
+        } else {
+          document.getElementById('wallet-content').innerHTML = `
+            <p>Aucun wallet Hedera</p>
+            <button class="btn btn-primary mt-20" onclick="createWallet()">Créer Mon Wallet</button>
+          `;
+        }
+        
+        // Load workout history
+        const workouts = await apiRequest('/api/workouts/history');
+        if (workouts.success && workouts.data.length > 0) {
+          let html = '<table><thead><tr><th>Date</th><th>Pas</th><th>Distance</th><th>Calories</th></tr></thead><tbody>';
+          workouts.data.slice(0, 10).forEach(w => {
+            html += `<tr>
+              <td>${new Date(w.workoutDate).toLocaleString()}</td>
+              <td>👟 ${w.steps}</td>
+              <td>📏 ${w.distance || 0} km</td>
+              <td>🔥 ${w.calories || 0} kcal</td>
+            </tr>`;
+          });
+          html += '</tbody></table>';
+          document.getElementById('workout-history').innerHTML = html;
+        } else {
+          document.getElementById('workout-history').innerHTML = '<p>Aucune activité enregistrée</p>';
+        }
+        
+        // Load purchases count
+        const purchases = await apiRequest('/api/marketplace/purchases');
+        if (purchases.success) {
+          document.getElementById('total-purchases').textContent = purchases.data.length;
+        }
+        
+      } catch (error) {
+        console.error('Erreur chargement données:', error);
+      }
+    }
+    
+    // Create wallet
+    async function createWallet() {
+      document.getElementById('wallet-content').innerHTML = '<p>⏳ Création du wallet en cours (5-10 secondes)...</p>';
+      
+      try {
+        const result = await apiRequest('/api/users/wallet/create', 'POST');
+        
+        if (result.success) {
+          document.getElementById('wallet-content').innerHTML = `
+            <div class="alert alert-success">
+              ✅ Wallet créé avec succès!
+            </div>
+            <p><strong>Account ID:</strong> ${result.wallet.accountId}</p>
+            <p><strong>⚠️ IMPORTANT:</strong> Sauvegarde ta private key!</p>
+            <textarea readonly style="width: 100%; margin: 10px 0; padding: 10px;">${result.wallet.privateKey}</textarea>
+            <a href="${result.wallet.explorerUrl}" target="_blank" class="btn btn-primary">
+              🌐 Voir sur HashScan
+            </a>
+          `;
+        } else {
+          document.getElementById('wallet-content').innerHTML = `<div class="alert alert-error">❌ ${result.message}</div>`;
+        }
+      } catch (error) {
+        document.getElementById('wallet-content').innerHTML = `<div class="alert alert-error">❌ Erreur création wallet</div>`;
+      }
+    }
+    
+    // Sync shoes
+    async function syncShoes() {
+      const steps = parseInt(document.getElementById('steps-input').value);
+      
+      if (steps < 1000 || steps > 50000) {
+        document.getElementById('sync-result').innerHTML = '<div class="alert alert-error">❌ Entre 1,000 et 50,000 pas</div>';
+        return;
+      }
+      
+      document.getElementById('sync-result').innerHTML = '<p>⏳ Synchronisation...</p>';
+      
+      try {
+        const result = await apiRequest('/api/shoes/sync', 'POST', {
+          deviceId: `WEB_${Date.now()}`,
+          steps,
+          distance: (steps * 0.0008).toFixed(1),
+          calories: Math.round(steps * 0.04)
+        });
+        
+        if (result.success) {
+          const reward = result.data.reward || 0;
+          const newBalance = result.data.newBalance;        // ✅ Balance du serveur
+          const totalSteps = result.data.totalSteps;        // ✅ Total steps du serveur
+          
+          let message = `✅ ${steps} pas synchronisés!`;
+          
+          if (reward > 0) {
+            message += `<br>💰 +${reward} FIT tokens gagnés!`;
+            
+            if (result.data.blockchain?.transferred) {
+              message += '<br>🎉 Tokens envoyés sur Hedera blockchain!';
+            }
+          }
+          
+          document.getElementById('sync-result').innerHTML = `<div class="alert alert-success">${message}</div>`;
+          
+          // ✅ IMPORTANT: Recharger les données depuis le serveur immédiatement
+          await loadUserBalance();
+          
+          // Mettre à jour aussi les stats affichés
+          const updatedUser = JSON.parse(localStorage.getItem('user'));
+          document.getElementById('total-steps').textContent = updatedUser.totalSteps || 0;
+          document.getElementById('fit-balance').textContent = updatedUser.fitBalance || 0;
+          
+          // Reload page after 2 seconds pour voir l'historique
+          setTimeout(() => {
+            location.reload();
+          }, 2000);
+        } else {
+          document.getElementById('sync-result').innerHTML = `<div class="alert alert-error">❌ ${result.message}</div>`;
+        }
+      } catch (error) {
+        document.getElementById('sync-result').innerHTML = '<div class="alert alert-error">❌ Erreur synchronisation</div>';
+        console.error(error);
+      }
+    }
+    
+    // Load data on page load
+    loadUserData();
+  </script>
+</body>
+</html>

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Hedera Fit</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-card">
+      <h1>🏋️ HEDERA FIT</h1>
+      
+      <!-- Tabs -->
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('login')">Connexion</div>
+        <div class="tab" onclick="switchTab('register')">Inscription</div>
+      </div>
+      
+      <!-- Alert -->
+      <div id="alert" class="hidden"></div>
+      
+      <!-- Login Form -->
+      <div id="login-tab" class="tab-content active">
+        <form id="login-form" onsubmit="handleLogin(event)">
+          <div class="form-group">
+            <label for="login-email">Email</label>
+            <input type="email" id="login-email" required placeholder="admin@hederafit.com">
+          </div>
+          
+          <div class="form-group">
+            <label for="login-password">Mot de passe</label>
+            <input type="password" id="login-password" required placeholder="********">
+          </div>
+          
+          <button type="submit" class="btn btn-primary" style="width: 100%">
+            Se connecter
+          </button>
+        </form>
+        
+        <div class="text-center mt-20" style="color: #666; font-size: 14px;">
+          <p>👨‍💼 Admin: admin@hederafit.com / admin123</p>
+        </div>
+      </div>
+      
+      <!-- Register Form -->
+      <div id="register-tab" class="tab-content">
+        <form id="register-form" onsubmit="handleRegister(event)">
+          <div class="form-group">
+            <label for="register-name">Nom complet</label>
+            <input type="text" id="register-name" required placeholder="John Doe">
+          </div>
+          
+          <div class="form-group">
+            <label for="register-email">Email</label>
+            <input type="email" id="register-email" required placeholder="john@example.com">
+          </div>
+          
+          <div class="form-group">
+            <label for="register-password">Mot de passe</label>
+            <input type="password" id="register-password" required placeholder="********" minlength="6">
+          </div>
+          
+          <button type="submit" class="btn btn-primary" style="width: 100%">
+            S'inscrire
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'http://localhost:3000';
+    
+    // Switch between tabs
+    function switchTab(tab) {
+      // Update tab buttons
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      event.target.classList.add('active');
+      
+      // Update tab content
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      document.getElementById(tab + '-tab').classList.add('active');
+      
+      // Hide alert
+      hideAlert();
+    }
+    
+    // Show alert
+    function showAlert(message, type = 'error') {
+      const alert = document.getElementById('alert');
+      alert.className = `alert alert-${type}`;
+      alert.textContent = message;
+      alert.classList.remove('hidden');
+    }
+    
+    // Hide alert
+    function hideAlert() {
+      document.getElementById('alert').classList.add('hidden');
+    }
+    
+    // Handle Login
+    async function handleLogin(event) {
+      event.preventDefault();
+      
+      const email = document.getElementById('login-email').value;
+      const password = document.getElementById('login-password').value;
+      
+      try {
+        const response = await fetch(`${API_URL}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          // Save token and user info
+          localStorage.setItem('token', data.token);
+          localStorage.setItem('user', JSON.stringify(data.user));
+          
+          showAlert('✅ Connexion réussie! Redirection...', 'success');
+          
+          // Redirect based on role
+          setTimeout(() => {
+            if (data.user.isAdmin) {
+              window.location.href = 'admin.html';
+            } else {
+              window.location.href = 'dashboard.html';
+            }
+          }, 1000);
+        } else {
+          showAlert('❌ ' + data.message, 'error');
+        }
+      } catch (error) {
+        showAlert('❌ Erreur de connexion au serveur', 'error');
+        console.error(error);
+      }
+    }
+    
+    // Handle Register
+    async function handleRegister(event) {
+      event.preventDefault();
+      
+      const name = document.getElementById('register-name').value;
+      const email = document.getElementById('register-email').value;
+      const password = document.getElementById('register-password').value;
+      
+      try {
+        const response = await fetch(`${API_URL}/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email, password })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          showAlert('✅ Inscription réussie! Connexion...', 'success');
+          
+          // Auto-login
+          setTimeout(() => {
+            document.getElementById('login-email').value = email;
+            document.getElementById('login-password').value = password;
+            switchTab('login');
+            document.querySelector('#login-form button').click();
+          }, 1500);
+        } else {
+          showAlert('❌ ' + data.message, 'error');
+        }
+      } catch (error) {
+        showAlert('❌ Erreur de connexion au serveur', 'error');
+        console.error(error);
+      }
+    }
+    
+    // Check if already logged in
+    if (localStorage.getItem('token')) {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      if (user.isAdmin) {
+        window.location.href = 'admin.html';
+      } else {
+        window.location.href = 'dashboard.html';
+      }
+    }
+  </script>
+</body>
+</html>

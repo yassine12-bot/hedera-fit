@@ -139,5 +139,5 @@ module.exports = {
   run: dbRun,
   get: dbGet,
   all: dbAll,
-  initDatabase
+  initialize:initDatabase
 };

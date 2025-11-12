@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard - Hedera Fit</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>👨‍💼 ADMIN DASHBOARD</h1>
+      <div class="user-info">
+        <span id="user-name">Admin</span>
+        <button class="btn btn-secondary" onclick="logout()">Déconnexion</button>
+      </div>
+    </div>
+    
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat-card">
+        <div class="number" id="total-users">0</div>
+        <div class="label">👥 Total Users</div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="number" id="tokens-distributed">0</div>
+        <div class="label">💰 Tokens Distribués</div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="number" id="total-steps">0</div>
+        <div class="label">👟 Total Pas</div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="number" id="total-purchases">0</div>
+        <div class="label">🛒 Total Achats</div>
+      </div>
+    </div>
+    
+    <!-- Tabs -->
+    <div class="card">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('products')">📦 Produits</div>
+        <div class="tab" onclick="switchTab('challenges')">🏆 Challenges</div>
+        <div class="tab" onclick="switchTab('users')">👥 Utilisateurs</div>
+      </div>
+    </div>
+    
+    <!-- Products Tab -->
+    <div id="products-tab" class="tab-content active">
+      <!-- Add Product Form -->
+      <div class="card">
+        <h2>➕ Ajouter un Produit</h2>
+        <form id="add-product-form" onsubmit="addProduct(event)">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div class="form-group">
+              <label>Nom</label>
+              <input type="text" id="product-name" required>
+            </div>
+            
+            <div class="form-group">
+              <label>Catégorie</label>
+              <select id="product-category" required>
+                <option value="protein">Protéine</option>
+                <option value="supplement">Supplément</option>
+                <option value="equipment">Équipement</option>
+                <option value="apparel">Vêtement</option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label>Prix (FIT)</label>
+              <input type="number" id="product-price" required min="1">
+            </div>
+            
+            <div class="form-group">
+              <label>Stock</label>
+              <input type="number" id="product-stock" value="100" required min="1">
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label>Description</label>
+            <textarea id="product-description" rows="2"></textarea>
+          </div>
+          
+          <button type="submit" class="btn btn-primary">Ajouter Produit</button>
+        </form>
+      </div>
+      
+      <!-- Products List -->
+      <div class="card">
+        <h2>📦 Liste des Produits</h2>
+        <div id="products-list">
+          <p>Chargement...</p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Challenges Tab -->
+    <div id="challenges-tab" class="tab-content">
+      <!-- Add Challenge Form -->
+      <div class="card">
+        <h2>➕ Créer un Challenge</h2>
+        <form id="add-challenge-form" onsubmit="addChallenge(event)">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div class="form-group">
+              <label>Titre</label>
+              <input type="text" id="challenge-title" required>
+            </div>
+            
+            <div class="form-group">
+              <label>Type</label>
+              <select id="challenge-type" required>
+                <option value="steps">Pas (steps)</option>
+                <option value="distance">Distance (mètres)</option>
+                <option value="streak">Série (jours)</option>
+                <option value="comments">Commentaires</option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label>Objectif</label>
+              <input type="number" id="challenge-target" required min="1">
+            </div>
+            
+            <div class="form-group">
+              <label>Récompense (FIT)</label>
+              <input type="number" id="challenge-reward" required min="1">
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label>Description</label>
+            <textarea id="challenge-description" rows="2"></textarea>
+          </div>
+          
+          <button type="submit" class="btn btn-primary">Créer Challenge</button>
+        </form>
+      </div>
+      
+      <!-- Challenges List -->
+      <div class="card">
+        <h2>🏆 Liste des Challenges</h2>
+        <div id="challenges-list">
+          <p>Chargement...</p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Users Tab -->
+    <div id="users-tab" class="tab-content">
+      <div class="card">
+        <h2>👥 Liste des Utilisateurs</h2>
+        <div id="users-list">
+          <p>Chargement...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'http://localhost:3000';
+    let token = localStorage.getItem('token');
+    let user = JSON.parse(localStorage.getItem('user') || '{}');
+    
+    // Check authentication and admin
+    if (!token || !user.isAdmin) {
+      alert('❌ Accès refusé. Droits admin requis.');
+      window.location.href = 'login.html';
+    }
+    
+    // Logout
+    function logout() {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = 'login.html';
+    }
+    
+    // API Request
+    async function apiRequest(endpoint, method = 'GET', body = null) {
+      const options = {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      };
+      
+      if (body) options.body = JSON.stringify(body);
+      
+      const response = await fetch(`${API_URL}${endpoint}`, options);
+      return await response.json();
+    }
+    
+    // Switch Tab
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      event.target.classList.add('active');
+      
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      document.getElementById(tab + '-tab').classList.add('active');
+      
+      // Load data for the tab
+      if (tab === 'products') loadProducts();
+      if (tab === 'challenges') loadChallenges();
+      if (tab === 'users') loadUsers();
+    }
+    
+    // Load Stats
+    async function loadStats() {
+      try {
+        const stats = await apiRequest('/api/admin/stats');
+        if (stats.success) {
+          document.getElementById('total-users').textContent = stats.data.totalUsers;
+          document.getElementById('tokens-distributed').textContent = stats.data.tokensDistributed;
+          document.getElementById('total-steps').textContent = stats.data.totalSteps.toLocaleString();
+          document.getElementById('total-purchases').textContent = stats.data.totalPurchases;
+        }
+      } catch (error) {
+        console.error('Erreur stats:', error);
+      }
+    }
+    
+    // Load Products
+    async function loadProducts() {
+      try {
+        const result = await apiRequest('/api/marketplace/products');
+        
+        if (result.success) {
+          let html = '<table><thead><tr><th>Nom</th><th>Catégorie</th><th>Prix</th><th>Stock</th><th>Actions</th></tr></thead><tbody>';
+          
+          result.data.forEach(p => {
+            html += `<tr>
+              <td>${p.name}</td>
+              <td>${p.category}</td>
+              <td>${p.priceTokens} FIT</td>
+              <td>${p.stock}</td>
+              <td>
+                <button class="btn btn-danger" onclick="deleteProduct(${p.id}, '${p.name}')">Supprimer</button>
+              </td>
+            </tr>`;
+          });
+          
+          html += '</tbody></table>';
+          document.getElementById('products-list').innerHTML = html;
+        }
+      } catch (error) {
+        document.getElementById('products-list').innerHTML = '<div class="alert alert-error">Erreur chargement</div>';
+      }
+    }
+    
+    // Add Product
+    async function addProduct(event) {
+      event.preventDefault();
+      
+      const data = {
+        name: document.getElementById('product-name').value,
+        category: document.getElementById('product-category').value,
+        priceTokens: parseInt(document.getElementById('product-price').value),
+        stock: parseInt(document.getElementById('product-stock').value),
+        description: document.getElementById('product-description').value
+      };
+      
+      try {
+        const result = await apiRequest('/api/admin/products', 'POST', data);
+        
+        if (result.success) {
+          alert('✅ Produit ajouté!');
+          document.getElementById('add-product-form').reset();
+          loadProducts();
+        } else {
+          alert('❌ ' + result.message);
+        }
+      } catch (error) {
+        alert('❌ Erreur ajout produit');
+      }
+    }
+    
+    // Delete Product
+    async function deleteProduct(id, name) {
+      if (!confirm(`Supprimer "${name}"?`)) return;
+      
+      try {
+        const result = await apiRequest(`/api/admin/products/${id}`, 'DELETE');
+        
+        if (result.success) {
+          alert('✅ Produit supprimé');
+          loadProducts();
+        } else {
+          alert('❌ ' + result.message);
+        }
+      } catch (error) {
+        alert('❌ Erreur suppression');
+      }
+    }
+    
+    // Load Challenges
+    async function loadChallenges() {
+      try {
+        const result = await apiRequest('/api/admin/challenges');
+        
+        if (result.success) {
+          let html = '<table><thead><tr><th>Titre</th><th>Type</th><th>Objectif</th><th>Récompense</th><th>Actif</th><th>Actions</th></tr></thead><tbody>';
+          
+          result.data.forEach(c => {
+            html += `<tr>
+              <td>${c.title}</td>
+              <td>${c.type}</td>
+              <td>${c.target}</td>
+              <td>${c.reward} FIT</td>
+              <td>${c.isActive ? '🟢 Oui' : '🔴 Non'}</td>
+              <td>
+                <button class="btn btn-secondary" onclick="toggleChallenge(${c.id}, ${c.isActive})">
+                  ${c.isActive ? 'Désactiver' : 'Activer'}
+                </button>
+                <button class="btn btn-danger" onclick="deleteChallenge(${c.id}, '${c.title}')">Supprimer</button>
+              </td>
+            </tr>`;
+          });
+          
+          html += '</tbody></table>';
+          document.getElementById('challenges-list').innerHTML = html;
+        }
+      } catch (error) {
+        document.getElementById('challenges-list').innerHTML = '<div class="alert alert-error">Erreur chargement</div>';
+      }
+    }
+    
+    // Add Challenge
+    async function addChallenge(event) {
+      event.preventDefault();
+      
+      const data = {
+        title: document.getElementById('challenge-title').value,
+        type: document.getElementById('challenge-type').value,
+        target: parseInt(document.getElementById('challenge-target').value),
+        reward: parseInt(document.getElementById('challenge-reward').value),
+        description: document.getElementById('challenge-description').value
+      };
+      
+      try {
+        const result = await apiRequest('/api/admin/challenges', 'POST', data);
+        
+        if (result.success) {
+          alert('✅ Challenge créé!');
+          document.getElementById('add-challenge-form').reset();
+          loadChallenges();
+        } else {
+          alert('❌ ' + result.message);
+        }
+      } catch (error) {
+        alert('❌ Erreur création challenge');
+      }
+    }
+    
+    // Toggle Challenge
+    async function toggleChallenge(id, currentState) {
+      try {
+        const result = await apiRequest(`/api/admin/challenges/${id}`, 'PUT', {
+          isActive: currentState ? 0 : 1
+        });
+        
+        if (result.success) {
+          loadChallenges();
+        } else {
+          alert('❌ ' + result.message);
+        }
+      } catch (error) {
+        alert('❌ Erreur modification');
+      }
+    }
+    
+    // Delete Challenge
+    async function deleteChallenge(id, title) {
+      if (!confirm(`Supprimer "${title}"?`)) return;
+      
+      try {
+        const result = await apiRequest(`/api/admin/challenges/${id}`, 'DELETE');
+        
+        if (result.success) {
+          alert('✅ Challenge supprimé');
+          loadChallenges();
+        } else {
+          alert('❌ ' + result.message);
+        }
+      } catch (error) {
+        alert('❌ Erreur suppression');
+      }
+    }
+    
+    // Load Users
+    async function loadUsers() {
+      try {
+        const result = await apiRequest('/api/admin/users');
+        
+        if (result.success) {
+          let html = '<table><thead><tr><th>Nom</th><th>Email</th><th>FIT Balance</th><th>Total Pas</th><th>Wallet Hedera</th><th>Admin</th></tr></thead><tbody>';
+          
+          result.data.forEach(u => {
+            html += `<tr>
+              <td>${u.name}</td>
+              <td>${u.email}</td>
+              <td>${u.fitBalance} FIT</td>
+              <td>${u.totalSteps || 0}</td>
+              <td>${u.hederaAccountId ? '✅ ' + u.hederaAccountId : '❌'}</td>
+              <td>${u.isAdmin ? '👨‍💼' : '👤'}</td>
+            </tr>`;
+          });
+          
+          html += '</tbody></table>';
+          document.getElementById('users-list').innerHTML = html;
+        }
+      } catch (error) {
+        document.getElementById('users-list').innerHTML = '<div class="alert alert-error">Erreur chargement</div>';
+      }
+    }
+    
+    // Initialize
+    document.getElementById('user-name').textContent = user.name || 'Admin';
+    loadStats();
+    loadProducts();
+  </script>
+</body>
+</html>
