@@ -5,7 +5,7 @@ const { PrivateKey, AccountCreateTransaction, Hbar } = require('@hashgraph/sdk')
 const db = require('../../lib/db');
 const hederaService = require('../../lib/hedera');
 const authMiddleware = require('../../auth/middleware');
-
+const activityLogger = require('../../lib/activity-logger');
 // Clé de chiffrement (À METTRE DANS .ENV EN PRODUCTION!)
 const ENCRYPTION_KEY = process.env.WALLET_ENCRYPTION_KEY || 'hedera-fit-secret-key-change-me-32b';
 const ALGORITHM = 'aes-256-cbc';
@@ -136,6 +136,11 @@ router.post('/wallet/create', authMiddleware, async (req, res) => {
     `, [newAccountId.toString(), encryptedKey, req.user.id]);
 
     console.log('✅ Wallet sauvegardé en DB');
+
+    await activityLogger.logWalletCreated(
+  req.user.id,
+  newAccount.accountId.toString()
+);
 
     res.status(201).json({
       success: true,

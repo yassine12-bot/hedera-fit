@@ -1,14 +1,14 @@
-// ⭐ NOUVELLE VERSION - PAS DE TRANSFER NFT ⭐
+require('dotenv').config();
 const {
   Client,
   AccountId,
   PrivateKey,
-  TokenCreateTransaction,
-  TokenType,
-  TokenSupplyType,
-  TokenMintTransaction,
+  TokenId,
   TransferTransaction,
-  Hbar
+  TokenAssociateTransaction,
+  Hbar,
+  HbarUnit,
+  AccountCreateTransaction
 } = require('@hashgraph/sdk');
 
 class HederaService {
@@ -44,137 +44,133 @@ class HederaService {
     }
   }
 
-  async createFitToken() {
+  /**
+   * Créer un nouveau compte Hedera
+   */
+  async createAccount(initialBalance = 10) {
     try {
-      console.log('🪙 Création du token FIT...');
-      const transaction = await new TokenCreateTransaction()
-        .setTokenName('FIT Token')
-        .setTokenSymbol('FIT')
-        .setDecimals(2)
-        .setInitialSupply(1000000)
-        .setTreasuryAccountId(this.operatorId)
-        .setTokenType(TokenType.FungibleCommon)
-        .setSupplyType(TokenSupplyType.Infinite)
-        .setAdminKey(this.operatorKey)
-        .setSupplyKey(this.operatorKey)
-        .freezeWith(this.client);
-
-      const signedTx = await transaction.sign(this.operatorKey);
-      const response = await signedTx.execute(this.client);
-      const receipt = await response.getReceipt(this.client);
-      this.fitTokenId = receipt.tokenId;
-
-      console.log('✅ Token FIT créé!');
-      console.log('🪙 Token ID:', this.fitTokenId.toString());
-      return this.fitTokenId.toString();
-    } catch (error) {
-      console.error('❌ Erreur création token:', error.message);
-      throw error;
-    }
-  }
-
-  async createBadgeNFT() {
-    try {
-      console.log('🏅 Création du NFT Badge collection...');
-      const transaction = await new TokenCreateTransaction()
-        .setTokenName('FIT Badges')
-        .setTokenSymbol('FITBADGE')
-        .setTokenType(TokenType.NonFungibleUnique)
-        .setSupplyType(TokenSupplyType.Infinite)
-        .setTreasuryAccountId(this.operatorId)
-        .setSupplyKey(this.operatorKey)
-        .setAdminKey(this.operatorKey)
-        .freezeWith(this.client);
-
-      const signedTx = await transaction.sign(this.operatorKey);
-      const response = await signedTx.execute(this.client);
-      const receipt = await response.getReceipt(this.client);
-      this.nftTokenId = receipt.tokenId;
-
-      console.log('✅ NFT Badge collection créée!');
-      console.log('🏅 NFT Token ID:', this.nftTokenId.toString());
-      return this.nftTokenId.toString();
-    } catch (error) {
-      console.error('❌ Erreur création NFT:', error.message);
-      throw error;
-    }
-  }
-
-  async transferFitTokens(recipientAccountId, amount) {
-    try {
-      console.log(`💸 Transfert de ${amount} FIT tokens à ${recipientAccountId}...`);
-      if (!this.fitTokenId) {
-        throw new Error('Token FIT pas encore créé');
+      if (!this.client) {
+        await this.initialize();
       }
 
-      const amountWithDecimals = amount * 100;
-      const transaction = await new TransferTransaction()
-        .addTokenTransfer(this.fitTokenId, this.operatorId, -amountWithDecimals)
-        .addTokenTransfer(this.fitTokenId, recipientAccountId, amountWithDecimals)
-        .freezeWith(this.client);
+      console.log(`💰 Création d'un nouveau compte avec ${initialBalance} HBAR...`);
 
-      const signedTx = await transaction.sign(this.operatorKey);
-      const response = await signedTx.execute(this.client);
-      await response.getReceipt(this.client);
+      // Générer une nouvelle paire de clés
+      const newAccountPrivateKey = PrivateKey.generateECDSA();
+      const newAccountPublicKey = newAccountPrivateKey.publicKey;
 
-      console.log('✅ Transfert réussi!');
-      return true;
-    } catch (error) {
-      console.error('❌ Erreur transfert:', error.message);
-      return false;
-    }
-  }
+      // Créer le compte
+      const newAccount = await new AccountCreateTransaction()
+        .setKey(newAccountPublicKey)
+        .setInitialBalance(Hbar.from(initialBalance, HbarUnit.Hbar))
+        .execute(this.client);
 
-  async mintBadge(recipientAccountId, badgeType) {
-    try {
-      console.log('⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐');
-      console.log('🏅 NOUVELLE VERSION - MINT BADGE SANS TRANSFER');
-      console.log(`🏅 Création du badge "${badgeType}"...`);
-      console.log('⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐');
+      // Obtenir le reçu
+      const receipt = await newAccount.getReceipt(this.client);
+      const newAccountId = receipt.accountId;
 
-      if (!this.nftTokenId) {
-        throw new Error('NFT Token pas encore créé');
-      }
-
-      const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
-      const metadata = Buffer.from(`${badgeType}:${dateStr}`);
-      console.log(`📦 Metadata size: ${metadata.length} bytes`);
-
-      const mintTx = await new TokenMintTransaction()
-        .setTokenId(this.nftTokenId)
-        .setMetadata([metadata])
-        .freezeWith(this.client);
-
-      const mintSignedTx = await mintTx.sign(this.operatorKey);
-      const mintResponse = await mintSignedTx.execute(this.client);
-      const mintReceipt = await mintResponse.getReceipt(this.client);
-      const serialNumber = mintReceipt.serials[0];
-
-      // ✅ PAS DE TRANSFER - Le badge reste dans le wallet principal
-      console.log('✅ Badge créé et conservé dans le wallet principal!');
-      console.log('🏅 Serial Number:', serialNumber.toString());
-      console.log('⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐');
+      console.log(`✅ Nouveau compte créé: ${newAccountId.toString()}`);
+      console.log(`🔑 Private Key: ${newAccountPrivateKey.toStringDer()}`);
+      console.log(`🔑 Public Key: ${newAccountPublicKey.toStringDer()}`);
 
       return {
-        tokenId: this.nftTokenId.toString(),
-        serialNumber: serialNumber.toString(),
-        metadata: metadata.toString()
+        accountId: newAccountId,
+        privateKey: newAccountPrivateKey.toStringDer(),
+        publicKey: newAccountPublicKey.toStringDer()
       };
+
     } catch (error) {
-      console.error('❌ Erreur création badge:', error.message);
+      console.error('❌ Erreur création compte:', error);
       throw error;
     }
   }
 
   setFitTokenId(tokenId) {
-    this.fitTokenId = tokenId;
-    console.log('🪙 FIT Token ID configuré:', tokenId);
+    this.fitTokenId = TokenId.fromString(tokenId);
+    console.log('🪙 FIT Token configuré:', this.fitTokenId.toString());
   }
 
   setNftTokenId(tokenId) {
-    this.nftTokenId = tokenId;
-    console.log('🏅 NFT Token ID configuré:', tokenId);
+    this.nftTokenId = TokenId.fromString(tokenId);
+    console.log('🎨 NFT Token configuré:', this.nftTokenId.toString());
+  }
+
+  async transferFitTokens(recipientId, amount) {
+    try {
+      if (!this.client) {
+        throw new Error('Client Hedera non initialisé');
+      }
+
+      if (!this.fitTokenId) {
+        throw new Error('FIT Token ID non configuré');
+      }
+
+      const recipient = AccountId.fromString(recipientId);
+
+      // Vérifier si le destinataire a associé le token
+      // (Pour simplifier, on suppose que oui, sinon il faudra d'abord faire une association)
+
+      const transaction = await new TransferTransaction()
+        .addTokenTransfer(this.fitTokenId, this.operatorId, -amount)
+        .addTokenTransfer(this.fitTokenId, recipient, amount)
+        .execute(this.client);
+
+      const receipt = await transaction.getReceipt(this.client);
+
+      if (receipt.status.toString() === 'SUCCESS') {
+        console.log(`✅ ${amount} FIT tokens transférés à ${recipientId}`);
+        return {
+          success: true,
+          transactionId: transaction.transactionId
+        };
+      }
+
+      return { success: false };
+
+    } catch (error) {
+      console.error('❌ Erreur transfert tokens:', error.message);
+      throw error;
+    }
+  }
+
+  async associateToken(accountId, accountPrivateKey) {
+    try {
+      if (!this.client) {
+        throw new Error('Client Hedera non initialisé');
+      }
+
+      if (!this.fitTokenId) {
+        throw new Error('FIT Token ID non configuré');
+      }
+
+      const account = AccountId.fromString(accountId);
+      const privateKey = PrivateKey.fromString(accountPrivateKey);
+
+      const transaction = await new TokenAssociateTransaction()
+        .setAccountId(account)
+        .setTokenIds([this.fitTokenId])
+        .freezeWith(this.client)
+        .sign(privateKey);
+
+      const txResponse = await transaction.execute(this.client);
+      const receipt = await txResponse.getReceipt(this.client);
+
+      console.log(`✅ Token associé au compte ${accountId}`);
+      return receipt;
+
+    } catch (error) {
+      console.error('❌ Erreur association token:', error.message);
+      throw error;
+    }
+  }
+
+  close() {
+    if (this.client) {
+      this.client.close();
+    }
   }
 }
 
-module.exports = new HederaService();
+// Export une instance unique (singleton)
+const hederaService = new HederaService();
+module.exports = hederaService;

@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../../lib/db');
 const hederaService = require('../../lib/hedera');
 const authMiddleware = require('../../auth/middleware');
+const activityLogger = require('../../lib/activity-logger');
 
 /**
  * POST /api/shoes/sync
@@ -11,7 +12,7 @@ const authMiddleware = require('../../auth/middleware');
 router.post('/sync', authMiddleware, async (req, res) => {
   try {
     const { deviceId, steps, distance, calories, timestamp } = req.body;
-    
+
     // Validation
     if (!deviceId || !steps) {
       return res.status(400).json({
@@ -32,7 +33,6 @@ router.post('/sync', authMiddleware, async (req, res) => {
         INSERT INTO devices (userId, deviceId, deviceType, lastSync)
         VALUES (?, ?, 'smart_shoe', CURRENT_TIMESTAMP)
       `, [req.user.id, deviceId]);
-      
       console.log(`📱 Nouvel appareil enregistré: ${deviceId}`);
     } else {
       // Mettre à jour la dernière sync
@@ -71,7 +71,6 @@ router.post('/sync', authMiddleware, async (req, res) => {
     // Calculer les récompenses basées sur les pas
     let reward = 0;
     let message = 'Données synchronisées!';
-
     if (steps >= 15000) {
       reward = 30;
       message = '🔥 15K+ pas! +30 FIT tokens!';
@@ -83,62 +82,71 @@ router.post('/sync', authMiddleware, async (req, res) => {
       message = '👟 5K+ pas! +5 FIT tokens!';
     }
 
+    // Récupérer le wallet Hedera
+    const user = await db.get(
+      'SELECT hederaAccountId FROM users WHERE id = ?',
+      [req.user.id]
+    );
+
     let hederaTransferred = false;
     let hederaError = null;
 
-    if (reward > 0) {
-      // ✅ NOUVEAU: Récupérer le wallet de l'utilisateur
-      const user = await db.get(
-        'SELECT hederaAccountId FROM users WHERE id = ?',
-        [req.user.id]
-      );
-
-      // ✅ AUTO-DISTRIBUTION sur Hedera!
-      if (user.hederaAccountId) {
-        try {
-          console.log(`💰 Envoi de ${reward} FIT tokens à ${user.hederaAccountId}...`);
-          
-          // Initialiser Hedera si pas encore fait
-          if (!hederaService.client) {
-            await hederaService.initialize();
-            hederaService.setFitTokenId(process.env.FIT_TOKEN_ID);
-          }
-
-          // Transférer les tokens sur Hedera!
-          const transferred = await hederaService.transferFitTokens(
-            user.hederaAccountId, 
-            reward
-          );
-
-          if (transferred) {
-            hederaTransferred = true;
-            console.log(`✅ ${reward} FIT tokens envoyés sur Hedera!`);
-            message += ' 🎉 Tokens envoyés sur ton wallet Hedera!';
-          } else {
-            console.log('⚠️ Échec transfert Hedera, sauvegarde en DB seulement');
-          }
-
-        } catch (error) {
-          console.error('❌ Erreur transfert Hedera:', error.message);
-          hederaError = error.message;
-          // Continue quand même, on sauvegarde en DB
+    // Transfert Hedera si wallet existant et reward > 0
+    if (reward > 0 && user.hederaAccountId) {
+      try {
+        if (!hederaService.client) {
+          await hederaService.initialize();
+          hederaService.setFitTokenId(process.env.FIT_TOKEN_ID);
         }
-      } else {
-        console.log('📭 User n\'a pas de wallet Hedera, sauvegarde en DB seulement');
-      }
 
-      // Enregistrer la récompense en DB
+        hederaTransferred = await hederaService.transferFitTokens(
+          user.hederaAccountId,
+          reward
+        );
+
+        if (hederaTransferred) {
+          console.log(`✅ ${reward} FIT tokens envoyés sur Hedera!`);
+          message += ' 🎉 Tokens envoyés sur ton wallet Hedera!';
+        } else {
+          console.log('⚠️ Échec transfert Hedera, sauvegarde en DB seulement');
+        }
+
+      } catch (error) {
+        console.error('❌ Erreur transfert Hedera:', error.message);
+        hederaError = error.message;
+      }
+    } else if (!user.hederaAccountId && reward > 0) {
+      console.log('📭 User n\'a pas de wallet Hedera, sauvegarde en DB seulement');
+    }
+
+    // Enregistrer la récompense en DB
+    if (reward > 0) {
       await db.run(`
         INSERT INTO rewards (userId, type, amount, referenceId, createdAt)
         VALUES (?, 'daily_steps', ?, ?, CURRENT_TIMESTAMP)
       `, [req.user.id, reward, result.lastID]);
 
-      // Mettre à jour le solde local (backup)
       await db.run(
         'UPDATE users SET fitBalance = fitBalance + ? WHERE id = ?',
         [reward, req.user.id]
       );
     }
+
+    // ================== NOUVEAU: Logger l'activité HCS ==================
+    if (reward > 0) {
+      await activityLogger.logSync(
+        user.hederaAccountId || `user-${req.user.id}`,
+        steps,
+        reward,
+        user.hederaAccountId ? (hederaTransferred ? 'success' : 'failed') : 'no_wallet'
+      );
+    }
+
+    // Récupérer le nouveau balance et totalSteps
+    const updatedUser = await db.get(
+      'SELECT fitBalance, totalSteps FROM users WHERE id = ?',
+      [req.user.id]
+    );
 
     res.json({
       success: true,
@@ -149,6 +157,8 @@ router.post('/sync', authMiddleware, async (req, res) => {
         distance,
         calories,
         reward,
+        newBalance: updatedUser.fitBalance,
+        totalSteps: updatedUser.totalSteps,
         blockchain: {
           transferred: hederaTransferred,
           error: hederaError

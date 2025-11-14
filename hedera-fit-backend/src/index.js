@@ -5,7 +5,7 @@ const path = require('path');
 const db = require('./lib/db');
 const app = express();
 const PORT = process.env.PORT || 3000;
-
+const activityLogger = require('./lib/activity-logger');
 // ==================== MIDDLEWARES ==================== 
 app.use(cors());
 app.use(express.json());
@@ -107,8 +107,11 @@ async function startServer() {
     if (process.env.NFT_TOKEN_ID) {
       hederaService.setNftTokenId(process.env.NFT_TOKEN_ID);
       console.log(`🏅 NFT Token configuré: ${process.env.NFT_TOKEN_ID}`);
+     
     }
-    
+     // ✅ Initialiser toujours le logger
+      console.log('📝 Initialisation Activity Logger...');
+    await activityLogger.initialize();
     // Démarrer le serveur
     app.listen(PORT, () => {
       console.log('');
